@@ -430,6 +430,28 @@ def devid_present(vid):
     """
     return vid ^ ofp.OFPVID_PRESENT
 
+def push_mpls(table, mpls_label, eth_type=ether.ETH_TYPE_MPLS):
+    """Return OpenFlow action list to push MPLS header with MPLS tag.
+
+    Args:
+        mpls_label (int): MPLS Label
+        eth_type (int): ethertype that is set in the packet, default to MPLS unicast, could also be MPLS multicast
+    Returns:
+        list: actions to push MPLS header and set MPLS label.
+    """
+    return [parser.OFPActionPushMpls(eth_type), table.set_field(**{'mpls_label': mpls_label})]
+
+
+def pop_mpls(eth_type):
+    """Return OpenFlow action list to pop MPLS header and rewrite ethertype.
+
+    Args:
+        eth_type (int): ethertype that is set in the packet.
+    Returns:
+        list: actions to pop MPLS header and rewrite ethertype.
+    """
+
+    return [parser.OFPActionPopMpls(eth_type)]
 
 def push_vlan_act(table, vlan_vid, eth_type=ether.ETH_TYPE_8021Q):
     """Return OpenFlow action list to push Ethernet 802.1Q header with VLAN VID.

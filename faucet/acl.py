@@ -96,6 +96,8 @@ The output action contains a dictionary with the following elements:
         'swap_vid': int,
         'vlan_vid': int,
         'vlan_vids': list,
+        'pop_mpls': int,
+        'mpls_label': int,
     }
     tunnel_types = {
         'type': str,

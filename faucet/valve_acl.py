@@ -57,6 +57,14 @@ def rewrite_vlan(acl_table, output_dict):
             vlan_actions.extend(push_vlan(acl_table, vlan_vid))
     return vlan_actions
 
+def rewrite_mpls(acl_table, output_dict):
+    """Implement actions to push and pop MPLS labels."""
+    output_actions = []
+    if 'mpls_label' in output_dict:
+        output_actions.extend(valve_of.push_mpls(acl_table, output_dict['mpls_label']))
+    if 'pop_mpls' in output_dict:
+        output_actions.extend(valve_of.pop_mpls(output_dict['pop_mpls']))
+    return output_actions
 
 def build_output_actions(acl_table, output_dict):
     """Implement actions to alter packet/output."""
@@ -67,6 +75,9 @@ def build_output_actions(acl_table, output_dict):
     vlan_actions = rewrite_vlan(acl_table, output_dict)
     if vlan_actions:
         output_actions.extend(vlan_actions)
+    mpls_actions = rewrite_mpls(acl_table, output_dict)
+    if mpls_actions:
+        output_actions.extend(mpls_actions)
     if 'set_fields' in output_dict:
         for set_field in output_dict['set_fields']:
             output_actions.append(acl_table.set_field(**set_field))

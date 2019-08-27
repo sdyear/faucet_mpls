@@ -7,6 +7,7 @@
 # pylint: disable=too-many-arguments
 # pylint: disable=unbalanced-tuple-unpacking
 
+from functools import partial
 import binascii
 import collections
 import copy
@@ -4913,6 +4914,131 @@ acls:
                     'ping -c3 %s' % second_host.IP())], root_intf=True, packets=1)
         self.assertTrue(re.search('vlan 100, p 2,', tcpdump_txt))
 
+class FaucetMPLSTest(FaucetUntaggedTest):
+    CONFIG_GLOBAL = """
+vlans:
+    100:
+        description: "untagged"
+        unicast_flood: False
+acls:
+   mpls:
+        # test MPLS push entry
+        - rule:
+              dl_type: 0x800      # ipv4
+              actions:
+                  output:
+                      mpls_label: 55
+                      port: %(port_2)d
+
+        # test MPLS pop entry
+        - rule:
+              dl_type: 0x8847      # mpls
+              mpls_label: 50
+              mpls_bos: 1
+              actions:
+                  output:
+                      pop_mpls: 0x800
+                      port: %(port_2)d
+        
+        # test MPLS pop entry
+        - rule:
+              dl_type: 0x8847      # mpls
+              mpls_label: 51
+              mpls_bos: 1
+              actions:
+                  output:
+                      mpls_label: 52
+                      port: %(port_2)d
+        
+        # test MPLS pop entry
+        - rule:
+              dl_type: 0x8847      # mpls
+              mpls_label: 53
+              mpls_bos: 0
+              actions:
+                  output:
+                      pop_mpls: 0x8847
+                      port: %(port_2)d
+"""
+    CONFIG = """
+        interfaces:
+            %(port_1)d:
+                native_vlan: 100
+                acl_in: mpls
+            %(port_2)d:
+                native_vlan: 100
+                acl_in: mpls
+            %(port_3)d:
+                native_vlan: 100
+"""
+
+
+    def test_untagged(self):
+        command_template = ('python3 -c \"from scapy.all import * ;'
+                            ' load_contrib(\'mpls\'); sendp(%s, iface=\'%s\', count=%u)"')
+        # test incoming IPv4 packet has MPLS header pushed on
+        hello_template = (
+            'Ether(src=\'%s\', dst=\'%s\')/'
+            'IP(src=\'%s\', dst=\'%s\')/'
+            'UDP(dport=68)/'
+            'b\'payload\'')
+        hostone, hosttwo = self.net.hosts[0], self.net.hosts[1]
+        tcpdump_filter = 'mpls'
+        tcpdump_txt = self.tcpdump_helper(
+            hosttwo, tcpdump_filter, [
+                partial(hostone.cmd, (command_template % (
+                    hello_template % (hostone.MAC(), hosttwo.MAC(), hostone.IP(), hosttwo.IP()),
+                    hostone.defaultIntf(), 1)))], timeout=5, vflags='-vv -A', packets=1)
+        self.assertTrue(re.search('MPLS', tcpdump_txt))
+
+        # test incoming packet MPLS header is poped off
+        hello_template = (
+            'Ether(src=\'%s\', dst=\'%s\',type=0x8847)/'
+            'MPLS(label=50, s=1, ttl=255)/'
+            'IP(src=\'%s\', dst=\'%s\')/'
+            'UDP(dport=68)/'
+            'b\'payload\'')
+        hostone, hosttwo = self.net.hosts[0], self.net.hosts[1]
+        tcpdump_filter = 'udp'
+        tcpdump_txt = self.tcpdump_helper(
+            hosttwo, tcpdump_filter, [
+                partial(hostone.cmd, (command_template % (
+                    hello_template % (hostone.MAC(), hosttwo.MAC(), hostone.IP(), hosttwo.IP()),
+                    hostone.defaultIntf(), 1)))], timeout=5, vflags='-vv -A', packets=1)
+        self.assertTrue(not re.search('MPLS', tcpdump_txt))
+
+        # test incoming packet has second MPLS label pushed on
+        hello_template = (
+            'Ether(src=\'%s\', dst=\'%s\',type=0x8847)/'
+            'MPLS(label=51, s=1, ttl=255)/'
+            'IP(src=\'%s\', dst=\'%s\')/'
+            'UDP(dport=68)/'
+            'b\'payload\'')
+        hostone, hosttwo = self.net.hosts[0], self.net.hosts[1]
+        tcpdump_filter = 'mpls'
+        tcpdump_txt = self.tcpdump_helper(
+            hosttwo, tcpdump_filter, [
+                partial(hostone.cmd, (command_template % (
+                    hello_template % (hostone.MAC(), hosttwo.MAC(), hostone.IP(), hosttwo.IP()),
+                    hostone.defaultIntf(), 1)))], timeout=5, vflags='-vv -A', packets=1)
+        self.assertTrue(re.search("MPLS \(label 52", tcpdump_txt))
+
+        # test incoming packet MPLS header is poped off
+        hello_template = (
+            'Ether(src=\'%s\', dst=\'%s\',type=0x8847)/'
+            'MPLS(label=53, s=0, ttl=255)/'
+            'MPLS(label=51, s=1, ttl=255)/'
+            'IP(src=\'%s\', dst=\'%s\')/'
+            'UDP(dport=68)/'
+            'b\'payload\'')
+        hostone, hosttwo = self.net.hosts[0], self.net.hosts[1]
+        tcpdump_filter = 'mpls'
+        tcpdump_txt = self.tcpdump_helper(
+            hosttwo, tcpdump_filter, [
+                partial(hostone.cmd, (command_template % (
+                    hello_template % (hostone.MAC(), hosttwo.MAC(), hostone.IP(), hosttwo.IP()),
+                    hostone.defaultIntf(), 1)))], timeout=5, vflags='-vv -A', packets=1)
+        self.assertTrue(not re.search("MPLS \(label 53", tcpdump_txt))
 
 class FaucetTaggedGlobalIPv4RouteTest(FaucetTaggedTest):
 
